@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Impression voice recorder</title>
+<meta name="description" content="Record your voice dataset for the Impression text-to-speech project.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Lora:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="sentences.js"></script>
+<style>
+:root {
+  --bg: #E4ECF8; --panel: #FFFFFF; --ink: #1F3A6E; --muted: #4F6690; --line: #C3D2EC; --tint: #CBD9F2;
+  --rec: #C8323C; --ok: #23795A; --warn: #9A560F;
+  --ui: "Atkinson Hyperlegible", system-ui, sans-serif; --read: "Lora", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0F1A2E; --panel: #17243B; --ink: #E3EBF8; --muted: #9CB0D0; --line: #2A3B58; --tint: #22345A;
+          --rec: #F06A72; --ok: #4CC497; --warn: #E3A35E; }
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 var(--ui); }
+main { max-width: 780px; margin: 0 auto; padding: 28px 16px 64px; }
+[hidden] { display: none !important; }
+h1, h2 { font-family: var(--read); font-weight: 600; line-height: 1.25; margin: 0 0 8px; }
+h1 { font-size: 1.75rem; } h2 { font-size: 1.2rem; }
+p { margin: 0 0 12px; }
+.muted { color: var(--muted); }
+.brand { font-family: var(--read); font-weight: 600; font-size: 1.05rem; margin-bottom: 20px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 24px; margin-bottom: 18px; }
+label { display: block; font-weight: 700; margin-bottom: 6px; }
+input[type=text] { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; width: 100%; max-width: 320px; }
+ul.tips { margin: 0; padding-left: 20px; } ul.tips li { margin-bottom: 6px; }
+button { font: inherit; font-weight: 700; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--ink); }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+button.link { background: none; border: none; padding: 4px 0; text-decoration: underline; font-weight: 400; color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 3px solid var(--ok); outline-offset: 2px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.checks { list-style: none; padding: 0; margin: 14px 0 0; }
+.checks li { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; background: var(--bg); }
+.checks li.good { color: var(--ok); } .checks li.warn { color: var(--warn); } .checks li.bad { color: var(--rec); }
+.err { color: var(--rec); font-size: .9rem; margin-top: 6px; min-height: 1.2em; }
+
+.top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: .95rem; color: var(--muted); }
+.track { position: relative; height: 8px; background: var(--tint); border-radius: 4px; margin: 10px 0 6px; }
+.track .fill { height: 100%; width: 0; background: var(--ok); border-radius: 4px; transition: width .25s; }
+.track .min { position: absolute; top: -4px; width: 2px; height: 16px; background: var(--ink); }
+.legend { display: flex; justify-content: space-between; font-size: .85rem; color: var(--muted); margin-bottom: 18px; }
+.prompt { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 36px 32px 24px; min-height: 240px; display: flex; flex-direction: column; justify-content: space-between; transition: border-color .15s, box-shadow .15s; }
+.prompt.live { border-color: var(--rec); box-shadow: 0 0 0 4px color-mix(in srgb, var(--rec) 22%, transparent); }
+.num { font-size: .9rem; color: var(--muted); margin-bottom: 10px; }
+#sentence { font-family: var(--read); font-size: clamp(1.55rem, 4.2vw, 2.25rem); line-height: 1.42; margin: 0; text-wrap: pretty; }
+.take { margin-top: 22px; font-size: .95rem; color: var(--muted); }
+.take.has { color: var(--ok); }
+.meter { height: 10px; background: var(--tint); border-radius: 5px; margin: 16px 0; overflow: hidden; }
+.meter > div { height: 100%; width: 0; background: var(--ok); }
+.meter.hot > div { background: var(--rec); }
+.controls { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.side { display: flex; gap: 10px; } .side.right { justify-content: flex-end; }
+#rec { width: 86px; height: 86px; border-radius: 50%; padding: 0; background: var(--rec); border: none; display: grid; place-items: center; }
+#rec span { width: 28px; height: 28px; border-radius: 50%; background: #fff; transition: border-radius .15s; }
+#rec.on span { border-radius: 6px; }
+@media (prefers-reduced-motion: no-preference) { #rec.on { animation: pulse 1.4s infinite; } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 12px color-mix(in srgb, var(--rec) 20%, transparent); } }
+.keys { text-align: center; color: var(--muted); font-size: .85rem; margin: 14px 0 0; }
+kbd { font: inherit; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; background: var(--panel); }
+#notice { min-height: 1.6em; margin: 14px 0 0; text-align: center; font-weight: 700; }
+#notice.warn { color: var(--warn); } #notice.bad { color: var(--rec); } #notice.good { color: var(--ok); }
+.opt { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 10px; font-size: .9rem; color: var(--muted); font-weight: 400; }
+.break { border-color: var(--ok); }
+.credit { font-size: .8rem; color: var(--muted); margin-top: 28px; }
+@media (max-width: 560px) {
+  .panel { padding: 18px; } .prompt { padding: 26px 18px 18px; }
+  .side button { padding: 10px 11px; } #rec { width: 76px; height: 76px; }
+  .keys { display: none; }
+}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Impression</div>
+
+  <!-- ───────── Setup ───────── -->
+  <section id="setup">
+    <div class="panel">
+      <h1>Record your voice dataset</h1>
+      <p>You'll read sentences out loud, one at a time. <b>150 is the minimum</b>; finishing all <span class="total"></span> gives your model the best shot. The sentences are ordered so the most useful ones come first.</p>
+      <p class="muted">Takes save in this browser, so you can stop and come back later on the same computer and browser.</p>
+      <label for="name">Your first name</label>
+      <input type="text" id="name" autocomplete="given-name" maxlength="30" placeholder="e.g. Matthew">
+      <div class="err" id="nameErr" role="alert"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Before you start</h2>
+      <ul class="tips">
+        <li>Use a laptop in a quiet room with soft surfaces. A closet full of clothes works great.</li>
+        <li>Keep the same spot, mic, and distance (about a hand's width from your laptop) every session.</li>
+        <li>Read in a calm, natural, even tone. The model copies everything, including your mood.</li>
+        <li>Stumbled? Just press Space and record it again.</li>
+        <li>Do it in 2 or 3 sittings. Your voice drifts when you're tired.</li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2>Mic check</h2>
+      <p>Takes about 8 seconds. It measures your room's background noise and how loud your voice comes through.</p>
+      <button id="checkBtn">Run mic check</button>
+      <p id="checkStep" class="muted" aria-live="polite" style="margin-top:12px"></p>
+      <ul class="checks" id="checkResults"></ul>
+    </div>
+
+    <div class="row">
+      <button class="primary" id="startBtn">Start recording</button>
+      <span class="muted" id="resumeNote"></span>
+    </div>
+  </section>
+
+  <!-- ───────── Studio ───────── -->
+  <section id="studio" hidden>
+    <div class="top"><span id="who"></span><span id="totals"></span></div>
+    <div class="track" aria-hidden="true"><div class="fill" id="bar"></div><div class="min" id="minMark"></div></div>
+    <div class="legend"><span id="minLabel">150 minimum</span><span id="goalLabel"></span></div>
+
+    <div class="panel break" id="breakPanel" hidden>
+      <h2>Nice, that's 50 more. Take a 5 minute break.</h2>
+      <p>Drink some water and rest your voice. Your takes are saved. This is also a good moment to export a backup, in case this browser's storage gets cleared.</p>
+      <div class="row"><button id="breakExport">Export backup</button><button class="primary" id="breakGo">Keep going</button></div>
+    </div>
+
+    <section class="prompt" id="card" aria-live="polite">
+      <div>
+        <div class="num" id="num"></div>
+        <p id="sentence"></p>
+      </div>
+      <div class="take" id="take"></div>
+    </section>
+
+    <div class="meter" id="meter" aria-hidden="true"><div id="level"></div></div>
+
+    <div class="controls">
+      <div class="side"><button id="back">Back</button></div>
+      <button id="rec" aria-label="Record"><span></span></button>
+      <div class="side right"><button id="play" disabled>Play</button><button id="next">Next</button></div>
+    </div>
+    <p class="keys"><kbd>Space</kbd> record or stop &nbsp; <kbd>P</kbd> play &nbsp; <kbd>←</kbd> <kbd>→</kbd> previous or next</p>
+    <label class="opt"><input type="checkbox" id="auto" checked> Go to the next sentence after each good take</label>
+    <p id="notice" role="status"></p>
+
+    <div class="panel" style="margin-top:28px">
+      <h2>When you're done</h2>
+      <p>Export downloads a zip with your clips and transcripts, ready for training. You can export any time; it doesn't delete anything.</p>
+      <div class="row"><button class="primary" id="exportBtn">Export my dataset</button><span class="muted" id="exportNote"></span></div>
+      <div class="row" style="margin-top:16px">
+        <button class="link" id="toSetup">Change name or redo mic check</button>
+        <button class="link" id="jumpNext">Jump to next unrecorded sentence</button>
+        <button class="link" id="wipe">Delete all my recordings</button>
+      </div>
+    </div>
+  </section>
+
+  <p class="credit">Sentences adapted from the CMU ARCTIC database (Carnegie Mellon University), reordered for sound coverage, plus 15 added questions. Your recordings never leave your computer until you export them.</p>
+</main>
+
+<script>
+const S = window.SENTENCES || [];
+const MIN = 150, BREAK_EVERY = 50, OUT_SR = 22050, MAX_SEC = 20;
+const $ = id => document.getElementById(id);
+document.querySelectorAll('.total').forEach(e => e.textContent = S.length);
+
+let db = null, ctx = null, stream = null, proc = null, tap = null;
+let name = '', pos = 0, takes = new Map(), sessionTakes = 0, player = null;
+let recording = false, chunks = [], peak = 0, recTimer = null, checking = false;
+
+// ───────── storage (best effort) ─────────
+function idbOpen() { return new Promise(res => { try { const r = indexedDB.open('impression-recorder', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch (e) { res(null); } }); }
+function idbDo(fn) { if (!db) return Promise.resolve(); return new Promise(res => { try { const tx = db.transaction('kv', 'readwrite'); fn(tx.objectStore('kv')); tx.oncomplete = () => res(); tx.onerror = () => res(); } catch (e) { res(); } }); }
+const save = (k, v) => idbDo(s => s.put(v, k));
+const del = k => idbDo(s => s.delete(k));
+function loadAll() { if (!db) return Promise.resolve([]); return new Promise(res => { try { const out = [], c = db.transaction('kv').objectStore('kv').openCursor(); c.onsuccess = () => { const cur = c.result; if (cur) { out.push([cur.key, cur.value]); cur.continue(); } else res(out); }; c.onerror = () => res([]); } catch (e) { res([]); } }); }
+
+// ───────── audio helpers ─────────
+const dB = x => 20 * Math.log10(Math.max(x, 1e-9));
+function concat(parts) { const n = parts.reduce((a, p) => a + p.length, 0), o = new Float32Array(n); let i = 0; for (const p of parts) { o.set(p, i); i += p.length; } return o; }
+function frameRms(x, sr) { const f = Math.floor(sr * 0.01), out = []; for (let i = 0; i + f <= x.length; i += f) { let s = 0; for (let j = i; j < i + f; j++) s += x[j] * x[j]; out.push(Math.sqrt(s / f)); } return out; }
+function trimSilence(x, sr) {
+  const a0 = Math.floor(sr * 0.1), b0 = Math.floor(sr * 0.15);              // drop key-press clicks at both ends
+  x = x.subarray(Math.min(a0, x.length), Math.max(a0, x.length - b0));
+  const f = Math.floor(sr * 0.01), rms = frameRms(x, sr);
+  if (!rms.length) return x;
+  const th = Math.max(0.003, Math.max(...rms) * 0.08);
+  let a = rms.findIndex(v => v > th), b = rms.length - 1 - [...rms].reverse().findIndex(v => v > th);
+  a = Math.max(0, a - 15); b = Math.min(rms.length, b + 20);                // keep ~150 ms before, ~200 ms after
+  return x.slice(a * f, b * f);
+}
+async function resample(x, sr) {
+  if (sr === OUT_SR) return x;
+  const oc = new OfflineAudioContext(1, Math.ceil(x.length * OUT_SR / sr), OUT_SR);
+  const buf = oc.createBuffer(1, x.length, sr); buf.copyToChannel(x, 0);
+  const src = oc.createBufferSource(); src.buffer = buf; src.connect(oc.destination); src.start();
+  return (await oc.startRendering()).getChannelData(0);
+}
+function wav(x, sr) {
+  const b = new ArrayBuffer(44 + x.length * 2), v = new DataView(b), w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + x.length * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, x.length * 2, true);
+  for (let i = 0; i < x.length; i++) { const s = Math.max(-1, Math.min(1, x[i])); v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true); }
+  return new Blob([b], { type: 'audio/wav' });
+}
+
+// ───────── microphone ─────────
+async function ensureMic() {
+  if (stream) { if (ctx.state === 'suspended') await ctx.resume(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('unsupported');
+  stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  proc = ctx.createScriptProcessor(4096, 1, 1);
+  proc.onaudioprocess = e => {
+    const d = e.inputBuffer.getChannelData(0); let p = 0;
+    for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > p) p = a; }
+    $('level').style.width = Math.max(0, Math.min(100, (dB(p) + 60) / 60 * 100)) + '%';
+    $('meter').classList.toggle('hot', p >= 0.98);
+    if (tap) tap(new Float32Array(d), p);
+  };
+  src.connect(proc); proc.connect(ctx.destination);
+}
+function micError(e) {
+  if (e && e.message === 'unsupported') return 'This browser can\'t record audio here. Use Chrome on a laptop, and make sure the address starts with https.';
+  return 'Microphone blocked. Click the mic or lock icon in the address bar, allow the microphone, then try again.';
+}
+
+// ───────── mic check ─────────
+const wait = ms => new Promise(r => setTimeout(r, ms));
+async function collect(sec) { const parts = []; tap = d => parts.push(d); await wait(sec * 1000); tap = null; return concat(parts); }
+async function micCheck() {
+  if (checking) return;
+  const step = $('checkStep'), list = $('checkResults');
+  list.innerHTML = '';
+  try { await ensureMic(); } catch (e) { step.textContent = micError(e); return; }
+  checking = true; $('checkBtn').disabled = true;
+  step.textContent = 'Stay completely quiet for 3 seconds…';
+  await wait(400);
+  const quiet = await collect(3);
+  step.innerHTML = 'Now read this out loud in your recording voice: <b>"The quick brown fox jumps over the lazy dog, and then it naps in the sun."</b>';
+  const talk = await collect(5);
+  const sr = ctx.sampleRate;
+  const qr = frameRms(quiet, sr).sort((a, b) => a - b);
+  const noise = dB(qr[Math.floor(qr.length / 2)] || 1e-9);
+  const tr = frameRms(talk, sr).sort((a, b) => b - a);
+  const loud = tr.slice(0, Math.max(1, Math.floor(tr.length * 0.3)));
+  const speech = dB(loud.reduce((a, b) => a + b, 0) / loud.length);
+  let pk = 0; for (const v of talk) pk = Math.max(pk, Math.abs(v));
+  const snr = speech - noise, rows = [];
+  if (noise > -45) rows.push(['bad', `Background noise is high (${noise.toFixed(0)} dB). Look for a fan, AC, fridge, or traffic, or try a smaller room.`]);
+  else if (noise > -55) rows.push(['warn', `Background noise is okay (${noise.toFixed(0)} dB). Quieter is better if you can manage it.`]);
+  else rows.push(['good', `Room is quiet (${noise.toFixed(0)} dB). Great.`]);
+  if (pk >= 0.98) rows.push(['bad', 'Your voice is clipping (too loud). Move back a little or speak a bit softer.']);
+  else if (speech < -40) rows.push(['bad', `Your voice is very quiet (${speech.toFixed(0)} dB). Move closer to the mic.`]);
+  else rows.push(['good', `Voice level is good (${speech.toFixed(0)} dB).`]);
+  if (snr < 20) rows.push(['bad', `Your voice is only ${snr.toFixed(0)} dB above the background. Aim for 30+. Get closer or find a quieter spot.`]);
+  else if (snr < 30) rows.push(['warn', `Your voice is ${snr.toFixed(0)} dB above the background. Usable; 30+ is ideal.`]);
+  else rows.push(['good', `Your voice is ${snr.toFixed(0)} dB above the background. Excellent.`]);
+  list.innerHTML = rows.map(([k, t]) => `<li class="${k}">${t}</li>`).join('');
+  const ok = !rows.some(r => r[0] === 'bad');
+  step.textContent = ok ? 'Mic check done. You\'re good to record.' : 'Mic check done. Fix the red items if you can, then run it again.';
+  save('lastCheck', { noise, speech, snr, ok, at: Date.now() });
+  checking = false; $('checkBtn').disabled = false;
+}
+
+// ───────── recording ─────────
+async function toggleRecord() {
+  if (checking) return;
+  if (!recording) {
+    try { await ensureMic(); } catch (e) { notice(micError(e), 'bad'); return; }
+    stopPlayback(); $('breakPanel').hidden = true;
+    chunks = []; peak = 0; recording = true;
+    tap = (d, p) => { chunks.push(d); if (p > peak) peak = p; };
+    $('rec').classList.add('on'); $('rec').setAttribute('aria-label', 'Stop'); $('card').classList.add('live');
+    notice('Recording. Read the sentence, then press Space.', '');
+    recTimer = setTimeout(() => { if (recording) toggleRecord(); }, MAX_SEC * 1000);
+    return;
+  }
+  recording = false; tap = null; clearTimeout(recTimer);
+  $('rec').classList.remove('on'); $('rec').setAttribute('aria-label', 'Record'); $('card').classList.remove('live');
+  const raw = concat(chunks), sr = ctx.sampleRate;
+  const clean = await resample(trimSilence(raw, sr), sr);
+  const dur = clean.length / OUT_SR;
+  if (dur < 0.7) { notice('Nothing usable was captured. Press Space and read the sentence again.', 'bad'); return; }
+  const s = S[pos], isNew = !takes.has(s.id);
+  const take = { text: s.text, blob: wav(clean, OUT_SR), dur, peak };
+  takes.set(s.id, take); await save('take:' + s.id, take);
+  if (isNew) sessionTakes++;
+  let good = false;
+  if (peak >= 0.98) notice('Saved, but it clipped (too loud). Move back a little and press Space to redo it.', 'warn');
+  else if (peak < 0.06) notice('Saved, but it\'s very quiet. Move closer and press Space to redo it.', 'warn');
+  else if (dur > MAX_SEC - 1) notice('Saved, but it ran very long. Check it with P, and redo it if there\'s extra noise at the end.', 'warn');
+  else { good = true; notice('Saved.', 'good'); }
+  render();
+  if (isNew && sessionTakes > 0 && sessionTakes % BREAK_EVERY === 0) { $('breakPanel').hidden = false; return; }
+  if (good && $('auto').checked && pos < S.length - 1) setTimeout(() => { if (!recording) move(1, true); }, 450);
+}
+function stopPlayback() { if (player) { player.pause(); player = null; } }
+function play() { const t = takes.get(S[pos].id); if (!t || recording) return; stopPlayback(); player = new Audio(URL.createObjectURL(t.blob)); player.play(); }
+function move(d, keepNotice) { if (recording) return; stopPlayback(); pos = Math.max(0, Math.min(S.length - 1, pos + d)); save('pos', pos); if (!keepNotice) notice('', ''); render(); }
+function jumpNext() { const i = S.findIndex(s => !takes.has(s.id)); if (i < 0) { notice('Every sentence is recorded. Export your dataset!', 'good'); return; } pos = i; save('pos', pos); notice('', ''); render(); }
+function notice(msg, kind) { const n = $('notice'); n.textContent = msg; n.className = kind; }
+
+function render() {
+  const s = S[pos], count = takes.size, mins = [...takes.values()].reduce((a, t) => a + t.dur, 0) / 60;
+  $('who').textContent = name ? `Recording as ${name}` : '';
+  $('totals').textContent = `${count} of ${S.length} recorded, ${mins.toFixed(1)} min of speech`;
+  $('bar').style.width = (count / S.length * 100) + '%';
+  $('minMark').style.left = (MIN / S.length * 100) + '%';
+  $('minLabel').textContent = count >= MIN ? 'Minimum reached ✓' : `${MIN - count} more to reach the minimum`;
+  $('goalLabel').textContent = `Goal: all ${S.length}`;
+  $('num').textContent = `Sentence ${pos + 1} of ${S.length}` + (s.id.startsWith('q') ? ' (a question)' : '');
+  $('sentence').textContent = s.text;
+  const t = takes.get(s.id);
+  $('take').textContent = t ? `Recorded (${t.dur.toFixed(1)} s). Press Space to replace it.` : 'Not recorded yet. Press Space to start.';
+  $('take').className = 'take' + (t ? ' has' : '');
+  $('play').disabled = !t; $('back').disabled = pos === 0; $('next').disabled = pos >= S.length - 1;
+  $('exportNote').textContent = count ? `${count} clips ready` : '';
+}
+
+// ───────── export ─────────
+const slug = n => n.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my';
+async function exportZip() {
+  if (!takes.size) { notice('Record at least one sentence before exporting.', 'warn'); return; }
+  if (typeof JSZip === 'undefined') { notice('The zip tool didn\'t load. Check your internet connection and reload the page.', 'bad'); return; }
+  notice('Building your zip…', '');
+  const zip = new JSZip(), root = zip.folder('dataset'), wavs = root.folder('wavs'), lines = [];
+  let secs = 0;
+  for (const s of S) {
+    const t = takes.get(s.id); if (!t) continue;
+    wavs.file(`${s.id}.wav`, t.blob); lines.push(`${s.id}.wav|${s.text.replace(/\|/g, ' ')}`); secs += t.dur;
+  }
+  root.file('metadata.csv', lines.join('\n') + '\n');
+  root.file('recording_info.json', JSON.stringify({ name, clips: lines.length, minutes: +(secs / 60).toFixed(2), sample_rate: OUT_SR, exported: new Date().toISOString(), sentence_list: 'CMU ARCTIC reordered (300) + 15 questions' }, null, 2));
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${slug(name)}_dataset.zip`;
+  document.body.appendChild(a); a.click(); a.remove();
+  notice(`Exported ${lines.length} clips (${(secs / 60).toFixed(1)} min) as ${slug(name)}_dataset.zip.` + (lines.length < MIN ? ` You still need ${MIN - lines.length} more for the minimum.` : ''), 'good');
+}
+
+// ───────── setup / navigation ─────────
+async function start() {
+  const n = $('name').value.trim();
+  if (!n) { $('nameErr').textContent = 'Enter your first name so your files are labeled.'; $('name').focus(); return; }
+  name = n; await save('name', name);
+  $('setup').hidden = true; $('studio').hidden = false; render();
+  try { await ensureMic(); } catch (e) { notice(micError(e), 'bad'); }
+}
+async function wipe() {
+  if (!takes.size) return;
+  if (!confirm(`Delete all ${takes.size} recordings from this browser? Export first if you want to keep them. This can't be undone.`)) return;
+  for (const id of takes.keys()) await del('take:' + id);
+  takes.clear(); pos = 0; save('pos', 0); notice('All recordings deleted.', ''); render();
+}
+
+$('name').addEventListener('input', () => $('nameErr').textContent = '');
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter') start(); });
+$('checkBtn').onclick = micCheck; $('startBtn').onclick = start;
+$('rec').onclick = toggleRecord; $('play').onclick = play;
+$('back').onclick = () => move(-1); $('next').onclick = () => move(1);
+$('exportBtn').onclick = exportZip; $('breakExport').onclick = exportZip;
+$('breakGo').onclick = () => { $('breakPanel').hidden = true; };
+$('toSetup').onclick = () => { if (recording) return; $('studio').hidden = true; $('setup').hidden = false; $('name').value = name; };
+$('jumpNext').onclick = jumpNext; $('wipe').onclick = wipe;
+document.addEventListener('keydown', e => {
+  if ($('studio').hidden || ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.code === 'Space') { e.preventDefault(); toggleRecord(); }
+  else if (e.key === 'p' || e.key === 'P') play();
+  else if (e.key === 'ArrowRight') move(1);
+  else if (e.key === 'ArrowLeft') move(-1);
+});
+window.addEventListener('beforeunload', e => { if (recording) e.preventDefault(); });
+
+(async () => {
+  if (!S.length) { document.querySelector('main').innerHTML = '<p>sentences.js failed to load.</p>'; return; }
+  db = await idbOpen();
+  const ids = new Set(S.map(s => s.id));
+  for (const [k, v] of await loadAll()) {
+    if (k === 'name') name = v;
+    else if (k === 'pos') pos = v;
+    else if (typeof k === 'string' && k.startsWith('take:') && ids.has(k.slice(5))) takes.set(k.slice(5), v);
+  }
+  pos = Math.min(Math.max(0, pos | 0), S.length - 1);
+  $('name').value = name;
+  if (takes.size) $('resumeNote').textContent = `Welcome back. You have ${takes.size} sentence${takes.size === 1 ? '' : 's'} saved.`;
+  if (!db) $('resumeNote').textContent = 'This browser can\'t save takes between visits. Export before you close the tab.';
+})();
+</script>
+</body>
+</html>
